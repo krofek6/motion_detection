@@ -102,7 +102,7 @@ class Video:
         return dilateThresh, contours
     
     def get_background(self):
-        """get the firs frame of a given video and edit it.
+        """get the first frame of a given video and edit it.
         This function should be used for "change detection",
         (see background_change().)
         """
@@ -136,7 +136,7 @@ class Video:
 
             #Draw quadrangle around the motion area 
             (x, y, w, h) = cv2.boundingRect(c)
-            cv2.rectangle(frames[0], (x, y), (x + w, y + h), (0, 255, 0), 3)
+            cv2.rectangle(frames[0], (x, y), (x + w, y + h), (255, 0, 0), 3)
 
         #Use cv2 imshow() to display the frames 
         cv2.imshow("Security Feed", frames[0])

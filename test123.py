@@ -1,10 +1,14 @@
 import motion_detection
 
 
-videoPath = "C:\\Users\\krofe\\Documents\\Python staff\\research\\athos and porthos.mp4"
+##videoPath = r"C:\Users\krofe\Documents\Python staff\research\111\00000.MTS"
 
-motion_detection.Video(videoPath).motion_detection()
+##motion_detection.Video(videoPath).motion_detection()
 
-##background_frame = motion_detection.Video(videoPath).get_background_test()
-##
-##motion_detection.Video(videoPath).motion_detection(background_frame, True)
+folderPath = r"C:\Users\krofe\Desktop\python\Aein_baseline1_7.6.20"
+fileTypeList = ['MTS']
+outputPath = r"C:\Users\krofe\Desktop\python\Aein_baseline1_7.6.20.csv"
+videoList = motion_detection.get_folder_videos(folderPath, fileTypeList)
+motion_detection.write_to_CSV(outputPath, videoList)
+
+

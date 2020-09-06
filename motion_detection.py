@@ -1,9 +1,12 @@
 import cv2
 import imutils
 import time
-import os
+import os 
+import numpy as np
 
 
+
+        
 
 class Setting:
     def __init__ (self):
@@ -14,11 +17,14 @@ class Setting:
         (for background it recommended to set it as 1 (see background_change() function .)
         
         """
-##        self.MIN_STIL_FRAME = for background change 1
         self.MIN_STIL_FRAME = 30*3 #for motion: fps * 3
         self.RESIZE_WIDTH = 500 #500
-        self.THRESHOLD = 25 #25
-        self.MIN_DIFF = 100 #100
+        self.THRESHOLD = 30 #25
+        self.MIN_DIFF = 80 #100
+        self.writeToCSV = False
+        self.outputFile = None
+        self.outputPath = None
+        self.writeOutput = None
     
 
 class Video:
@@ -28,11 +34,15 @@ class Video:
     videoPath --> a string cuntaining a video file path.
     setting   --> a Setting class array, if not given recive the defult Setting().
     """
-    def __init__ (self, videoPath, setting=Setting()):
+    def __init__ (self, fileName, videoPath ,setting=Setting()):
         """__init__ function of the Video class.
         Recive video path as a string and setting as a Setting class array.
         Start cv2 VideoCapture for the given video and get the video properties (fps and number of frame).
         """
+        self.fileName = fileName
+
+        self.videoPath = videoPath
+        
         #Set the setting
         self.setting = setting
 
@@ -45,6 +55,14 @@ class Video:
         #Get the number of frame in the video
         self.frameCount = self.video.get(cv2.CAP_PROP_FRAME_COUNT)
 
+        #Flags
+        self.writeMode = False
+        self.displayVideo = False
+
+        # cv2 function for fast run
+        self.readVideo = self.video.read
+
+
     def end_video_capture(self):
         """End the video capture
         also, close imshow() windows if there some open.
@@ -56,12 +74,12 @@ class Video:
 
         #Close all the open imshow() windows
         cv2.destroyAllWindows()
-
+        
     def read_frame(self):
         """Read the next frame and return it."""
-        ret, frame = self.video.read()
-        return frame
-    
+        ret, frame = self.readVideo()
+        return ret, frame
+
     def edit_frame(self, frame):
         """Edit the frame and prepare it to be compare to another frame.
         Recive a frame array (as frame) and return a edited frame array.
@@ -94,12 +112,11 @@ class Video:
         #Dilate the result
         dilateThresh = cv2.dilate(thresh, None, iterations=2)
 
-        #Find contours and grab them
+        #Find contours and grab them  
         cntrsResult = cv2.findContours(dilateThresh.copy(),
                                        cv2.RETR_EXTERNAL,
                                        cv2.CHAIN_APPROX_SIMPLE)
-        contours = imutils.grab_contours(cntrsResult)
-        return dilateThresh, contours
+        return dilateThresh, cntrsResult[0]
     
     def get_background(self):
         """get the first frame of a given video and edit it.
@@ -144,7 +161,8 @@ class Video:
         cv2.imshow("Frame Delta", frames[2])
         key = cv2.waitKey(2)
 
-    def motion_detection(self, backgroundFrame=None, flagB=False):
+
+    def motion_detection(self, backgroundFrame=None, flagB=False, outputPath=None):
         """Main function of the Video class.
 
         This function can work in two different way:
@@ -168,105 +186,96 @@ class Video:
         diffrence (simultaneously) from the background frame, the function will return the
         same value.
         """
-
+        
         #Set the the movment counter and movment flag
         noMovmentCounter = 0
         movment = False
 
+        startTime = 0
+        stopTime = 0
+        
+        ret, frame = self.read_frame()
+        resizeFrame, newFrame = self.edit_frame(frame)
+        preFrame = newFrame
+
+        noMovmentFlag = True
+
         #Start a for loop that run according  to the number of frames in the video.
-        for i in range(int(self.frameCount)-1):
+        for i in np.arange(1,int(self.frameCount-2)):
+##        for i in np.arange(self.step,int(self.frameCount)-1,self.step):
 
+##            frame = self.read_frame(i)
+
+            
             #Read the next frame and edit it
-            frame = self.read_frame()
+            ret, frame = self.read_frame()
+            if not ret:
+                break
             resizeFrame, newFrame = self.edit_frame(frame)
-
-            #Check if it the first frame
-            if i==0:
-
-                #Check if need to set background frame (according to the given flag).
-                if flagB:
-
-                    #Set background frame
-                    preFrame = backgroundFrame
-
-                #If not, set the first frame and continue
-                else:
-                    preFrame = newFrame
-                    continue
-
+            
             #Analyze the difference between the frames 
             frameDelta = cv2.absdiff(preFrame, newFrame)
             dilateThresh, contours = self.threshold_anlysis(frameDelta)
 
+            contoursArr = np.array(contours)
+
             #Start a loop for all the found differences
-            for c in contours:
+            for c in contoursArr:
 
                 #Check if the difference big enough
+
                 if cv2.contourArea(c) > self.setting.MIN_DIFF:
 
                     #If it is, reste the no movment counter
                     noMovmentCounter = 0
 
-                    #Check if it a continuation of a movment
+                #Check if it a continuation of a movment
                     if not movment:
 
                         #If not, declare movment and calculate the movment time
                         movment = True
                         sec= index_to_second(i, self.fps)
-                        print('start moving {}'.format(second_to_timer(sec)))
+                        timer = self.second_to_timer(sec)
+                        startTime = timer
 
-                    #Break the loop, (one big enough difference is enough to declare
-                    #movment, there is no need to go over the other contours.
                     break
+
             else:
 
                 #If the loop end without breaking, add 1 to the no movment counter
                 noMovmentCounter += 1
 
-            #Display the video for testing
-            self.display_video(contours, [resizeFrame, dilateThresh, frameDelta])
+                #Check if the movment counter big enough to declare stop moving
+                if noMovmentCounter > self.setting.MIN_STIL_FRAME and movment:
+                    movment = False
 
-            #Check if the movment counter big enough to declare stop moving
-            if noMovmentCounter > self.setting.MIN_STIL_FRAME and movment:
-                movment = False
+                    #Calculate the time when the movement stoped
+                    sec= index_to_second(i, self.fps, self.setting.MIN_STIL_FRAME)
+                    timer = self.second_to_timer(sec)
+                    stopTime = timer
+                    self.setting.writeOutput(f'{self.fileName},{startTime},{stopTime}\n')
 
-                #Calculate the time when the movement stoped
-                sec= index_to_second(i, self.fps, self.setting.MIN_STIL_FRAME)
-                print('stop moving {}'.format(second_to_timer(sec)))
-
-            #If there not background save the current frame to be compare to the next frame. 
-            if not flagB:
-                preFrame = newFrame
+            preFrame = newFrame
 
         #End the capture
         self.end_video_capture()
 
-    def get_background_test(self):
-        """only for athos and porthos.mp4"""
-        backgroundNumber = int(43*self.fps)
-        for i in range(int(self.frameCount)-1):
-            frame = self.read_frame()
-            if i == backgroundNumber:
-                resizeFrame, backgroundFrame = self.edit_frame(frame)
-                self.end_video_capture()
-                return backgroundFrame
+        
+    def second_to_timer(self, sec):
+        """Seconds to timer format.
+        This function recive number of second that pass and convert it to timer in the format:
+        Hours:Minutes:Seconds.
 
+        Recive one array:
+        sec --> int of the number of seconds
+
+        Return one array- string format of the time.
+        """
+        return time.strftime("%H:%M:%S", time.gmtime(sec))
 
     if __name__ == "__main__":
         pass
 
-
-def second_to_timer(sec):
-    """Seconds to timer format.
-    This function recive number of second that pass and convert it to timer in the format:
-    Hours:Minutes:Seconds.
-
-    Recive one array:
-    sec --> int of the number of seconds
-
-    Return one array- string format of the time.
-    """
-    return time.strftime("%H:%M:%S", time.gmtime(sec))
 
 def index_to_second(i, fps, buffer=0):
     """Index to seconds
@@ -303,6 +312,8 @@ def background_change(backgroundPath, videosPath):
     for videoPath in videosPath:
         Video(videoPath, setting).motion_detection(backgroundFrame, True)
 
+
+
 def get_folder_videos(folderPath, fileTypeList):
     """Find all the video files in given folder.
 
@@ -313,13 +324,25 @@ def get_folder_videos(folderPath, fileTypeList):
     Return one array:
     fileNameList --> list of all the video file name found in the folder. 
     """
-    fileNameList = []
-    for fileName in os.listdir(folderPath):
-        for fileType in fileTypeList:
-            if fileName[-len(fileType):] == fileType:
-                fileNameList.append(folderPath + '\\' + fileName)
-    return fileNameList
-    
-    
-    
+    fileList = []
+    appendList = fileList.append
+    for root, dirs, files in os.walk(folderPath):
+        for fileName in files:
+            for fileType in fileTypeList:
+                if fileName[-len(fileType):] == fileType:
+                    appendList([fileName, f'{root}//{fileName}'])
+    return fileList
+
+
+
+def write_to_CSV(outputPath, videoList):
+    output = open(outputPath, 'a')
+    setting = Setting()
+    setting.writeToCSV = True
+    setting.writeOutput = output.write
+    setting.writeOutput('File Name,Start,Stop\n')
+    for fileName, video in videoList:
+        Video(fileName, video, setting).motion_detection()
+    output.close()
+        
     

@@ -1,12 +1,8 @@
 import cv2
 import imutils
 import time
-import os 
-import numpy as np
+##import numpy as np
 
-
-
-        
 
 class Setting:
     def __init__ (self):
@@ -17,15 +13,16 @@ class Setting:
         (for background it recommended to set it as 1 (see background_change() function .)
         
         """
-        self.MIN_STIL_FRAME = 30*3 #for motion: fps * 3
+        self.MIN_STIL_FRAME = 25*3 #for motion: fps * 3
         self.RESIZE_WIDTH = 500 #500
-        self.THRESHOLD = 30 #25
+        self.THRESHOLD = 25 #25
         self.MIN_DIFF = 80 #100
-        self.writeToCSV = False
-        self.outputFile = None
-        self.outputPath = None
         self.writeOutput = None
-    
+        self.writeToCSV = False
+##        self.outputFile = None
+##        self.displayVideo = True
+        
+
 
 class Video:
     """Main class of motion_detection.
@@ -55,10 +52,6 @@ class Video:
         #Get the number of frame in the video
         self.frameCount = self.video.get(cv2.CAP_PROP_FRAME_COUNT)
 
-        #Flags
-        self.writeMode = False
-        self.displayVideo = False
-
         # cv2 function for fast run
         self.readVideo = self.video.read
 
@@ -74,11 +67,6 @@ class Video:
 
         #Close all the open imshow() windows
         cv2.destroyAllWindows()
-        
-    def read_frame(self):
-        """Read the next frame and return it."""
-        ret, frame = self.readVideo()
-        return ret, frame
 
     def edit_frame(self, frame):
         """Edit the frame and prepare it to be compare to another frame.
@@ -91,7 +79,8 @@ class Video:
         resizeFrame = imutils.resize(frame, width=self.setting.RESIZE_WIDTH)
 
         # change the frame to gray color
-        grayFrame = cv2.cvtColor(resizeFrame, cv2.COLOR_BGR2GRAY)
+        # 6 = cv2.COLOR_BGR2GRAY
+        grayFrame = cv2.cvtColor(resizeFrame, 6)
 
         # Blur the frame
         newFrame = cv2.GaussianBlur(grayFrame, (21, 21), 0)
@@ -104,35 +93,30 @@ class Video:
         """
 
         #Sift the diferrnt found between the frame (keep only the on above the minimum threshold)
+        # 0 = cv2.THRESH_BINARY
         thresh = cv2.threshold(frameDelta,
                                self.setting.THRESHOLD,
                                255,
-                               cv2.THRESH_BINARY)[1]
+                               0)[1]
 
         #Dilate the result
         dilateThresh = cv2.dilate(thresh, None, iterations=2)
 
-        #Find contours and grab them  
-        cntrsResult = cv2.findContours(dilateThresh.copy(),
-                                       cv2.RETR_EXTERNAL,
-                                       cv2.CHAIN_APPROX_SIMPLE)
+        #Find contours and grab them
+        # 0 = cv2.RETR_EXTERNAL, 2 = cv2.CHAIN_APPROX_SIMPLE
+        cntrsResult = cv2.findContours(dilateThresh.copy(), 0, 2)
         return dilateThresh, cntrsResult[0]
     
-    def get_background(self):
-        """get the first frame of a given video and edit it.
-        This function should be used for "change detection",
-        (see background_change().)
-        """
 
-        #Read the first frame and edit it
-        frame = self.read_frame()
-        resizeFrame, backgroundFrame = self.edit_frame(frame)
+    def getFrame(self, flag, frameId):
 
-        #End the capture
-        self.end_video_capture()
-        return backgroundFrame
-        
-        
+        # Check if frameId is frame number or frame time in sec
+        if flag:
+            self.video.set(cv2.CAP_PROP_POS_FRAMES, frameId-1)
+        else:
+            self.video.set(cv2.CAP_PROP_POS_MSEC, frameId*1000)
+        ret, frame = self.readVideo()
+        return frame
 
     def display_video(self, contours, frames):
         """Display the video and mark all the detected movment in it.
@@ -162,7 +146,7 @@ class Video:
         key = cv2.waitKey(2)
 
 
-    def motion_detection(self, backgroundFrame=None, flagB=False, outputPath=None):
+    def motion_detection(self):
         """Main function of the Video class.
 
         This function can work in two different way:
@@ -191,36 +175,31 @@ class Video:
         noMovmentCounter = 0
         movment = False
 
-        startTime = 0
-        stopTime = 0
-        
-        ret, frame = self.read_frame()
+        # Read the first frame, edit it and set it as preFrame.
+        ret, frame = self.readVideo()
         resizeFrame, newFrame = self.edit_frame(frame)
         preFrame = newFrame
 
-        noMovmentFlag = True
-
         #Start a for loop that run according  to the number of frames in the video.
-        for i in np.arange(1,int(self.frameCount-2)):
-##        for i in np.arange(self.step,int(self.frameCount)-1,self.step):
+        #+ NOTE: frameCount usually doesn't get the correct number of frames! +
+        for i in range(1,int(self.frameCount-2)):
 
-##            frame = self.read_frame(i)
-
-            
             #Read the next frame and edit it
-            ret, frame = self.read_frame()
+            ret, frame = self.readVideo()
+
+            # Check if the frame exists, if not break the loop because video end
             if not ret:
                 break
+            
             resizeFrame, newFrame = self.edit_frame(frame)
             
             #Analyze the difference between the frames 
             frameDelta = cv2.absdiff(preFrame, newFrame)
             dilateThresh, contours = self.threshold_anlysis(frameDelta)
 
-            contoursArr = np.array(contours)
 
             #Start a loop for all the found differences
-            for c in contoursArr:
+            for c in contours:
 
                 #Check if the difference big enough
 
@@ -229,35 +208,53 @@ class Video:
                     #If it is, reste the no movment counter
                     noMovmentCounter = 0
 
-                #Check if it a continuation of a movment
+                    #Check if it a continuation of movment
                     if not movment:
 
-                        #If not, declare movment and calculate the movment time
+                        #If not, declare movment and calculate the movment time in seconds
                         movment = True
-                        sec= index_to_second(i, self.fps)
+                        # 0 = cv2.CAP_PROP_POS_MSEC
+                        sec = self.video.get(0)/1000
+
+                        #Convert the time from seconds to string and save it
                         timer = self.second_to_timer(sec)
                         startTime = timer
 
+                    #Break the loop (one difference is enough to declare movment
                     break
 
             else:
 
-                #If the loop end without breaking, add 1 to the no movment counter
-                noMovmentCounter += 1
+                #If the loop end without breaking, check if movment
+                if movment:
+                    
+                    #Save the time when the movment first stop.
+                    if noMovmentCounter==0:
+                        # 0 = cv2.CAP_PROP_POS_MSEC
+                        msec = self.video.get(0)
 
-                #Check if the movment counter big enough to declare stop moving
-                if noMovmentCounter > self.setting.MIN_STIL_FRAME and movment:
-                    movment = False
+                    #Add 1 to the no movment counter
+                    noMovmentCounter += 1
 
-                    #Calculate the time when the movement stoped
-                    sec= index_to_second(i, self.fps, self.setting.MIN_STIL_FRAME)
-                    timer = self.second_to_timer(sec)
-                    stopTime = timer
-                    self.setting.writeOutput(f'{self.fileName},{startTime},{stopTime}\n')
+                    #Check if the movment counter big enough to declare stop moving
+                    if noMovmentCounter > self.setting.MIN_STIL_FRAME:
+                        movment = False
 
+                        #Calculate the time when the movement stoped
+                        sec = msec/1000
+                        timer = self.second_to_timer(sec)
+                        stopTime = timer
+
+                        #Write the start and the stop time of the movment
+                        self.setting.writeOutput(f'{self.fileName},{startTime},{stopTime}\n')
+                    
+            # for display video, delete the # in the next line
+            #self.display_video(contours, [resizeFrame, dilateThresh, frameDelta])
+
+            #Save the frame to compare to the next frame
             preFrame = newFrame
 
-        #End the capture
+        #End the video capture
         self.end_video_capture()
 
         
@@ -271,46 +268,13 @@ class Video:
 
         Return one array- string format of the time.
         """
-        return time.strftime("%H:%M:%S", time.gmtime(sec))
+        return time.strftime("%H:%M:%S", time.gmtime(round(sec)))
 
     if __name__ == "__main__":
         pass
 
 
-def index_to_second(i, fps, buffer=0):
-    """Index to seconds
-    Caculate the time of the frame by index and fps .
-    Recive two to tree array:
-    i      --> int of the index of the frame
-    fps    --> int of the fps of the video
-    buffer --> int of the no movment buffer (0 if not given)
-    """
-    return (i-buffer)/fps
-    
-def background_change(backgroundPath, videosPath):
-    """Background Change
-    Activete the motion_detection() on the Background Change method.
-    
-    The background video should start with clear frame (without animals)
-    and later, by compare the first "clear" frame (the background) to other frames,
-    the code will sense change like animal entering or living the frame.
 
-    Recive two array
-    backgroundPath --> a string of a full path of a video with a clear first frame.
-    videoPath --> list of strings of video files paths
-    (recomended to get from get_folder_videos())
-    """
-
-    #Get the background frame
-    backgroundFrame = Video(backgroundPath).get_background()
-
-    #set the setting 
-    setting = Setting()
-    setting.MIN_STIL_FRAME = 1
-
-    #Search movment in all the given videos
-    for videoPath in videosPath:
-        Video(videoPath, setting).motion_detection(backgroundFrame, True)
 
 
 
@@ -324,6 +288,7 @@ def get_folder_videos(folderPath, fileTypeList):
     Return one array:
     fileNameList --> list of all the video file name found in the folder. 
     """
+    import os
     fileList = []
     appendList = fileList.append
     for root, dirs, files in os.walk(folderPath):
@@ -338,11 +303,9 @@ def get_folder_videos(folderPath, fileTypeList):
 def write_to_CSV(outputPath, videoList):
     output = open(outputPath, 'a')
     setting = Setting()
-    setting.writeToCSV = True
     setting.writeOutput = output.write
     setting.writeOutput('File Name,Start,Stop\n')
     for fileName, video in videoList:
         Video(fileName, video, setting).motion_detection()
     output.close()
         
-    

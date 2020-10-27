@@ -1,35 +1,25 @@
+# Regular motion detection-
+# Create CSV file with the times of the deected motion. 
 import cv2
 
 def motion_detection(video):
-    """Main function of the Video class.
+    """The main function of motion_detection.
+    Detect motion in the given video,
+    Compairing the diffrence between each frame and the previous frame.
 
-    This function can work in two different way:
-        
-    Motion detection- analyze the diffrence between each frame and the previous frame.
-    With this way the function detect movment and not change.
-    For example, if an animal will relatively stay still in the frame,
-    the function will not detect it.
-    In addition, the function look for at least one significant diffrence between the
-    frames, and try to decide if there's a movment, so if there one movment or several
-    movments (simultaneously) the function will return the same value.
+    Recive one array:
+    video --> a Video class array.
 
-    Background change detection- analyze the diffrence between the given  backgound
-    frame and all the othere frames.
-    With this way the function detect change from the "clear" frame (the background frame)
-    and not movment.
-    For example, if an animal will relatively stay still or move in the frame, the
-    function will sense it as "movment".
-    In addition, the function look for at least one significant diffrence between the
-    frames, and try to decide if there's a change, so if there one diffrence or several
-    diffrence (simultaneously) from the background frame, the function will return the
-    same value.
+    Write the result to csv.
     """
         
     #Set the the movment counter and movment flag
+    #noMovmentCounter: count the number of frame with no movment in row. 
     noMovmentCounter = 0
+    #movment: if true -> movment was detected in the previous frames.
     movment = False
 
-    # Read the first frame, edit it and set it as preFrame.
+    #Read the first frame, edit it and set it as preFrame.
     ret, frame = video.readVideo()
     resizeFrame, newFrame = video.edit_frame(frame)
     preFrame = newFrame
@@ -38,13 +28,14 @@ def motion_detection(video):
     #+ NOTE: frameCount usually doesn't get the correct number of frames! +
     for i in range(1,int(video.frameCount-2)):
 
-        #Read the next frame and edit it
+        #Read the next frame
         ret, frame = video.readVideo()
 
         # Check if the frame exists, if not break the loop because video end
         if not ret:
             break
-            
+
+        #Edit the next frame and set it as newFrame.
         resizeFrame, newFrame = video.edit_frame(frame)
             
         #Analyze the difference between the frames 
@@ -59,7 +50,7 @@ def motion_detection(video):
 
             if cv2.contourArea(c) > video.setting.MIN_DIFF:
 
-                #If it is, reste the no movment counter
+                #If it is, reset the no movment counter
                 noMovmentCounter = 0
 
                 #Check if it a continuation of movment

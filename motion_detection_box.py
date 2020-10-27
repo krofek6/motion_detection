@@ -1,10 +1,10 @@
+# "box" motion detection-
+# Search for motion only in specific area in the frames.
+# Need to recive a black&white image of the same size as the frames,
+# The image need to be black with white area that signal the area in which to search motion. 
 import cv2
-import imutils
-import time
-##import numpy as np
 
-def motion_detection(video, markedImgPath):
-    markCntList, markCntRange = video.get_Marked_contours(markedImgPath)
+def motion_detection(video, markedImgPath, markCntList, markCntRange):
 
     # Read the first frame, edit it and set it as preFrame.
     ret, frame = video.readVideo()
@@ -15,21 +15,27 @@ def motion_detection(video, markedImgPath):
     #+ NOTE: frameCount usually doesn't get the correct number of frames! +
     for i in range(1,int(video.frameCount-2)):
 
-        #Read the next frame and edit it
+        #Read the next frame
         ret, frame = video.readVideo()
 
         # Check if the frame exists, if not break the loop because video end
         if not ret:
             break
-            
+
+        #Edit the next frame and set it as newFrame.
         resizeFrame, newFrame = video.edit_frame(frame)
 
+        #Start a for loop over the index of al the areas to search in them.
         for index in markCntRange:
+
+            #Get the area position
             x,y,w,h = cv2.boundingRect(markCntList[index][2])
+
+            #Cut the marked area from the frames
             newFrameEntry = newFrame[y:y+h, x:x+w]
             preFrameEntry = preFrame[y:y+h, x:x+w]
 
-            #Analyze the difference between the frames 
+            #Analyze the difference between the marked area in the frames 
             frameDelta = cv2.absdiff(preFrameEntry, newFrameEntry)
             dilateThresh, contours = video.threshold_anlysis(frameDelta)
 

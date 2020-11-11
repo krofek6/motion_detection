@@ -24,7 +24,7 @@ def motion_detection(video, writer, buffer, textCoord, font):
 
     #Start a for loop that run according  to the number of frames in the video.
     #+ NOTE: frameCount usually doesn't get the correct number of frames! +
-    for i in range(1,int(video.frameCount-2)):
+    for i in range(1,int(video.frameCount+10)):
 
         #Read the next frame
         ret, frame = video.readVideo()

@@ -20,6 +20,15 @@ def motion_detection(video, markedImgPath, markCntList, markCntRange):
 
         # Check if the frame exists, if not break the loop because video end
         if not ret:
+            stopTime = 'Video End'
+
+            #Check if the video end during a movement 
+            for index in markCntRange:
+                if markCntList[index][0]:
+                    
+                    #Write the movmet
+                    video.setting.writeCSV(f'{video.fileName},{index},{startTime},{stopTime}\n')
+                    
             break
 
         #Edit the next frame and set it as newFrame.

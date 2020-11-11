@@ -31,6 +31,13 @@ def motion_detection(video, writer, buffer, textCoord, font):
 
         # Check if the frame exists, if not break the loop because video end
         if not ret:
+
+            #Check if the video end during a movement 
+            if movment:
+
+                #Write the movmet
+                stopTime = 'Video End'
+                video.setting.writeCSV(f'{video.fileName},{startTime},{stopTime}\n')
             break
 
         #Edit the next frame and set it as newFrame.
